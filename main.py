@@ -95,9 +95,12 @@ def add_task() -> State:
     task_label = input('label? [misc]\t') or 'misc'
     task_status = input('status? [not started]\t') or 'not started'
     today_str = dt.datetime.now().strftime("%m-%d-%y")
-    task_due = dt.datetime.strptime(
-        input(f'due? [{today_str}]\t') or today_str, '%m-%d-%y'
-    )
+    task_due = input(f'due? [{today_str}]\t')
+    try:
+        dt.datetime.strptime(task_due, '%m-%d-%y')
+    except ValueError:
+        task_due = today_str
+    task_due = dt.datetime.strptime(task_due, '%m-%d-%y').strftime('%y%m%d')
     cursor.execute(
         'INSERT INTO tasks '
         '(completed, priority, task_name, status, label, due_date) '
@@ -115,7 +118,8 @@ def list_tasks() -> State:
         'FROM tasks WHERE completed=false ORDER BY priority, due_date;'
     ).fetchall()
     tasks_pretty = '\n'.join([task_pretty(
-        r['priority'], r['task_name'], r['status'], r['label'], r['due_date']
+        r['priority'], r['task_name'], r['status'], r['label'],
+        dt.datetime.strptime(r['due_date'], '%y%m%d').strftime('%m-%d-%y')
     ) for r in rows])
     print('current tasks:')
     print(tasks_pretty)
@@ -136,8 +140,10 @@ def update_task() -> State:
     user_input = input('> ')
     if user_input in task_names:
         cursor.execute(
-            'UPDATE tasks SET completed=true WHERE task_name=?;', user_input
+            'UPDATE tasks SET completed=true WHERE task_name=?;', (user_input, )
         )
+        conn.commit()
+        print(f'task {user_input} marked as completed!\n')
     else:
         print('task not found!\n')
     return State.MENU
