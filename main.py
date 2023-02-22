@@ -21,6 +21,12 @@ class State(Enum):
     EXIT = 'x'
 
 
+COLOR_GREEN = '\033[92m'
+COLOR_YELLOW = '\033[93m'
+COLOR_RED = '\033[91m'
+COLOR_RESET = '\033[0m'
+
+
 def get_user_data_dir(appname: str) -> Path:
     if sys.platform == "win32":
         import winreg
@@ -59,6 +65,10 @@ def initialize_data_store():
         'status TEXT, label TEXT, due_date TEXT);',
     )
     conn.commit()
+
+
+def style(text: str, color: str):
+    return color + text + COLOR_RESET
 
 
 def task_pretty(priority, task_name, status, label, due_date):
@@ -117,10 +127,23 @@ def list_tasks() -> State:
         'SELECT priority, task_name, status, label, due_date '
         'FROM tasks WHERE completed=false ORDER BY priority, due_date;'
     ).fetchall()
+
+    due_dates = [
+        dt.datetime.strptime(r['due_date'], '%y%m%d').date()
+        for r in rows
+    ]
+    today = dt.date.today()
+    stylized_due_dates = []
+    for due_date in due_dates:
+        stylized_due_date = due_date.strftime('%m-%d-%y')
+        if due_date == today:
+            stylized_due_date = style(stylized_due_date, COLOR_YELLOW)
+        elif due_date < today:
+            stylized_due_date = style(stylized_due_date, COLOR_RED)
+        stylized_due_dates.append(stylized_due_date)
     tasks_pretty = '\n'.join([task_pretty(
-        r['priority'], r['task_name'], r['status'], r['label'],
-        dt.datetime.strptime(r['due_date'], '%y%m%d').strftime('%m-%d-%y')
-    ) for r in rows])
+        r['priority'], r['task_name'], r['status'], r['label'], sdd
+    ) for r, sdd in zip(rows, stylized_due_dates)])
     print('current tasks:')
     print(tasks_pretty)
     print('\n')
