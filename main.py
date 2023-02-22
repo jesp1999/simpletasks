@@ -4,6 +4,7 @@ import argparse
 from enum import Enum
 from pathlib import Path
 from sqlite3 import Row
+from typing import Optional
 from typing import Sequence
 import datetime as dt
 
@@ -90,7 +91,7 @@ def menu() -> State:
 
 
 def add_task() -> State:
-    task_name = input('name? ')
+    task_name = input('name?\t')
     task_priority = int(input('priority? 0(hi)-255(low) [10]\t') or 10)
     task_label = input('label? [misc]\t') or 'misc'
     task_status = input('status? [not started]\t') or 'not started'
@@ -139,17 +140,57 @@ def update_task() -> State:
     print('which task to update?')
     user_input = input('> ')
     if user_input in task_names:
-        cursor.execute(
-            'UPDATE tasks SET completed=true WHERE task_name=?;', (user_input, )
-        )
-        conn.commit()
-        print(f'task {user_input} marked as completed!\n')
+        task_completed = input('completed? y/n [n]\t') not in ['', 'n', 'N']
+        if task_completed:
+            cursor.execute(
+                'UPDATE tasks SET completed=true WHERE task_name=?;',
+                (user_input,)
+            )
+            conn.commit()
+            print(f'task {user_input} marked as completed!\n')
+        else:
+
+            row: Row = cursor.execute(
+                '''SELECT priority, label, status, due_date 
+                FROM tasks WHERE task_name=? AND completed=false;''',
+                (user_input,)
+            ).fetchone()
+            task_name = input(
+                f'name? [{user_input}]\t'
+            ) or user_input
+            task_priority = int(input(
+                f'priority? 0(hi)-255(low) [{row["priority"]}]\t'
+            ) or row['priority'])
+            task_label = input(
+                f'label? [{row["label"]}]\t'
+            ) or row['label']
+            task_status = input(
+                f'status? [{row["status"]}]\t'
+            ) or row['status']
+            prev_due_date = dt.datetime.strptime(
+                row['due_date'], '%y%m%d').strftime('%m-%d-%y')
+            task_due = input(f'due? [{prev_due_date}]\t')
+            try:
+                dt.datetime.strptime(task_due, '%m-%d-%y')
+            except ValueError:
+                task_due = prev_due_date
+            task_due = dt.datetime.strptime(
+                task_due, '%m-%d-%y'
+            ).strftime('%y%m%d')
+            cursor.execute(
+                'UPDATE tasks SET task_name=?, priority=?, label=?, '
+                'status=?, due_date=? WHERE task_name=? AND completed=false;',
+                (task_name, task_priority, task_label, task_status,
+                 task_due, user_input,)
+            )
+            conn.commit()
+            print(f'task {user_input} has been updated!\n')
     else:
         print('task not found!\n')
     return State.MENU
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description='Task list CLI')
     parser.parse_args(argv)
     initialize_data_store()
